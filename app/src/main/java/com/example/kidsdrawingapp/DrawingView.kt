@@ -1,107 +1,185 @@
-package com.example.kidsdrawingapp
+package eu.tutorials.kidsdrawingapp
 
 import android.content.Context
 import android.graphics.*
 import android.util.AttributeSet
+import android.util.TypedValue
 import android.view.MotionEvent
 import android.view.View
 
-// 클래스로 DrawingView 생성
-// 무언가를 그리고 싶다면 활용도가 높은 뷰 타입을 사용해야하기 때문
-class DrawingView(context: Context, attrs: AttributeSet) : View(context, attrs){
+class DrawingView(context: Context,attrs:AttributeSet): View(context,attrs) {
+    private var mDrawPath: CustomPath? =
+        null // An variable of CustomPath inner class to use it further.
+    private var mCanvasBitmap: Bitmap? = null // An instance of the Bitmap.
 
-    private var mDrawPath : CustomPath? = null
-    private var mCanvasBitmap: Bitmap? = null
-    // Paint 클래스는 geometry, text, bitmap 등을 그릴 때 사용하는 스타일이나 색상의 정보값을 포함한 클래스입니다.
-    private var mDrawPaint: Paint? = null
-    private var mCanvasPaint: Paint? = null
-    private var mBrushSize: Float = 0.toFloat()
+    private var mDrawPaint: Paint? =
+        null // The Paint class holds the style and color information about how to draw geometries, text and bitmaps.
+    private var mCanvasPaint: Paint? = null // Instance of canvas paint view.
+
+    private var mBrushSize: Float =
+        0.toFloat() // A variable for stroke/brush size to draw on the canvas.
+
+    // A variable to hold a color of the stroke.
     private var color = Color.BLACK
+
+    /**
+     * A variable for canvas which will be initialized later and used.
+     *
+     *The Canvas class holds the "draw" calls. To draw something, you need 4 basic components: A Bitmap to hold the pixels, a Canvas to host
+     * the draw calls (writing into the bitmap), a drawing primitive (e.g. Rect,
+     * Path, text, Bitmap), and a paint (to describe the colors and styles for the
+     * drawing)
+     */
     private var canvas: Canvas? = null
 
-    // 변수들을 설정
-    init{
+    private val mPaths = ArrayList<CustomPath>() // ArrayList for Paths
+
+    // TODO(Step 2 : A variable for array list of undo paths.)
+    private val mUndoPaths = ArrayList<CustomPath>()
+
+    init {
         setUpDrawing()
     }
 
-    private fun setUpDrawing(){
+    /**
+     * This method initializes the attributes of the
+     * ViewForDrawing class.
+     */
+    private fun setUpDrawing() {
         mDrawPaint = Paint()
         mDrawPath = CustomPath(color, mBrushSize)
-        mDrawPaint!!.color = color
-        mDrawPaint!!.style = Paint.Style.STROKE
-        mDrawPaint!!.strokeJoin = Paint.Join.ROUND //브러쉬의 끝부분 모양
-        mDrawPaint!!.strokeCap = Paint.Cap.ROUND // Cap 은 선 끝의 위치
-        mCanvasPaint = Paint(Paint.DITHER_FLAG) // DITHER_FLAG 는 사용불가 색상을 실험할 때 렌더린을 제어한다.
-        mBrushSize = 20.toFloat()
+
+        mDrawPaint?.color = color
+
+        mDrawPaint?.style = Paint.Style.STROKE // This is to draw a STROKE style
+        mDrawPaint?.strokeJoin = Paint.Join.ROUND // This is for store join
+        mDrawPaint?.strokeCap = Paint.Cap.ROUND // This is for stroke Cap
+
+        mCanvasPaint = Paint(Paint.DITHER_FLAG) // Paint flag that enables dithering when blitting.
+
     }
 
-    // DrawingView 가 View 를 상속받기 때문에 하위 요소를 사용하거나 재정의 할 수 있다.
-    // 화면의 크기가 바뀔 때마다 불러오게 만든다
-    override fun onSizeChanged(w: Int, h: Int, oldw: Int, oldh: Int) {
-        super.onSizeChanged(w, h, oldw, oldh)
-        // ARGB_8888 사용할 수 있는 색상의 분량
+    override fun onSizeChanged(w: Int, h: Int, wprev: Int, hprev: Int) {
+        super.onSizeChanged(w, h, wprev, hprev)
         mCanvasBitmap = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888)
-        // 비트맵을 캔버스 비트맵으로 사용
         canvas = Canvas(mCanvasBitmap!!)
     }
 
-    // 그림을 그리고 싶을 때 실행될 코드
-    //onDraw 메서드는 뭔가를 적거나 그릴 캔버스를 포함
+
+    /**
+     * This method is called when a stroke is drawn on the canvas
+     * as a part of the painting.
+     */
     override fun onDraw(canvas: Canvas) {
         super.onDraw(canvas)
-        //시작 위치를 0f 0f 로 지정(왼쪽 위)
-        canvas.drawBitmap(mCanvasBitmap!!, 0f, 0f, mCanvasPaint)
 
-        //path를 그리기
-        //mDrawPath가 비어있는지 확인
-        if(!mDrawPath!!.isEmpty){
+        /**
+         * Draw the specified bitmap, with its top/left corner at (x,y), using the specified paint,
+         * transformed by the current matrix.
+         *
+         *If the bitmap and canvas have different densities, this function will take care of
+         * automatically scaling the bitmap to draw at the same density as the canvas.
+         *
+         * @param bitmap The bitmap to be drawn
+         * @param left The position of the left side of the bitmap being drawn
+         * @param top The position of the top side of the bitmap being drawn
+         * @param paint The paint used to draw the bitmap (may be null)
+         */
+        mCanvasBitmap?.let {
+            canvas.drawBitmap(it, 0f,   0f, mCanvasPaint)
+        }
+
+
+        for (p in mPaths) {
+            mDrawPaint?.strokeWidth = p.brushThickness
+            mDrawPaint?.color = p.color
+            canvas.drawPath(p, mDrawPaint!!)
+        }
+
+        if (!mDrawPath!!.isEmpty) {
             mDrawPaint!!.strokeWidth = mDrawPath!!.brushThickness
             mDrawPaint!!.color = mDrawPath!!.color
             canvas.drawPath(mDrawPath!!, mDrawPaint!!)
-
         }
     }
 
-    //화면을 터치할 때 그려지므로
-    override fun onTouchEvent(event: MotionEvent?): Boolean {
-        val touchX = event?.x
-        val touchY = event?.y
+    /**
+     * This method acts as an event listener when a touch
+     * event is detected on the device.
+     */
+    override fun onTouchEvent(event: MotionEvent): Boolean {
+        val touchX = event.x // Touch event of X coordinate
+        val touchY = event.y // touch event of Y coordinate
 
-        when(event?.action){
-            //action done 손가락을 화면에 댔을 때
-            //action move 화면을 손가락으로 드래그 했을 때
-            //action up 손가락을 들었을 때
+        when (event.action) {
             MotionEvent.ACTION_DOWN -> {
-                //화면을 눌렀을 때 실행할 코드
                 mDrawPath!!.color = color
                 mDrawPath!!.brushThickness = mBrushSize
 
-                mDrawPath!!.reset()
-                mDrawPath!!.moveTo(touchX!!, touchY!!)
+                mDrawPath!!.reset() // Clear any lines and curves from the path, making it empty.
+                mDrawPath!!.moveTo(
+                    touchX,
+                    touchY
+                ) // Set the beginning of the next contour to the point (x,y).
+            }
 
+            MotionEvent.ACTION_MOVE -> {
+                mDrawPath!!.lineTo(
+                    touchX,
+                    touchY
+                ) // Add a line from the last point to the specified point (x,y).
             }
-            MotionEvent.ACTION_MOVE ->{
-                if (touchX != null) {
-                    if (touchY != null) {
-                        mDrawPath!!.lineTo(touchX, touchY)
-                    }
-                }
-            }
+
             MotionEvent.ACTION_UP -> {
-                mDrawPath = CustomPath(color, mBrushSize)
 
+                mPaths.add(mDrawPath!!) //Add when to stroke is drawn to canvas and added in the path arraylist
+
+                mDrawPath = CustomPath(color, mBrushSize)
             }
             else -> return false
-
         }
-        //뷰가 화면에 보일 때 전체 뷰를 무효화 한다. 그리고 onDraw 가 그 후에 실행됨
+
         invalidate()
         return true
     }
 
-    // Drawing View 내부에서만 사용
-    // Path 타입. Path 클래스는 직선, 2차 곡선 및 3차 곡선으로 구성된 복합 기하학적 path를 압축함.
-    internal inner class CustomPath(var color : Int, var brushThickness : Float) : Path(){ //Drawing View 내부에서만 사용
-
+    /**
+     * This method is called when either the brush or the eraser
+     * sizes are to be changed. This method sets the brush/eraser
+     * sizes to the new values depending on user selection.
+     */
+    fun setSizeForBrush(newSize: Float) {
+        mBrushSize = TypedValue.applyDimension(
+            TypedValue.COMPLEX_UNIT_DIP, newSize,
+            resources.displayMetrics
+        )
+        mDrawPaint!!.strokeWidth = mBrushSize
     }
+
+    /**
+     * This function is called when the user desires a color change.
+     * This functions sets the color of a store to selected color and able to draw on view using that color.
+     *
+     * @param newColor
+     */
+    fun setColor(newColor: String) {
+        color = Color.parseColor(newColor)
+        mDrawPaint!!.color = color
+    }
+
+    // TODO(Step 3 : A function to add the paths for undo option.)
+    /**
+     * This function is called when the user selects the undo
+     * command from the application. This function removes the
+     * last stroke input by the user depending on the
+     * number of times undo has been activated.
+     */
+    fun onClickUndo() {
+        if (mPaths.size > 0) {
+
+            mUndoPaths.add(mPaths.removeAt(mPaths.size - 1))
+            invalidate() // Invalidate the whole view. If the view is visible
+        }
+    }
+    internal inner class CustomPath(var color:Int,var brushThickness:Float):Path()
 }
